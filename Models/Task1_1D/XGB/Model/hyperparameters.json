@@ -1,0 +1,1 @@
+{"min_child_weight": 1, "max_depth": 7, "gamma": 3, "eval_metric": "mae", "eta": 0.3, "base_score": 1}
