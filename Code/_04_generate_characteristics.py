@@ -32,8 +32,12 @@ def get_characteristics(path_to_file, fname, dim, typ="", motion=""):
         z = None    
     elif dim == 3:
         raise ValueError("Only 1D and 2D are available.")
+        
+    alpha = trajectory['Alpha'].values[0]
+    model = trajectory['Model'].values[0]
                 
-    ch = CharacteristicFour(x=x, y=y, z=z, dim=dim, file=fname, percentage_max_n=0.1, typ=typ, motion=motion)
+    ch = CharacteristicFour(x=x, y=y, z=z, dim=dim, file=fname, percentage_max_n=0.1, 
+                            typ=alpha, motion=model)
     data = ch.data
     
     return data
@@ -82,4 +86,5 @@ def generate_characteristics(simulation_folder, dimension):
 
 if __name__ == "__main__":
 
-    generate_characteristics(simulation_folder="Base_subtask_1D", dimension=1)
+    generate_characteristics(simulation_folder="T2_subtask_1D", dimension=1)
+#    generate_characteristics(simulation_folder="T2_subtask_2D", dimension=2)

@@ -148,7 +148,7 @@ class Characteristic(CharacteristicBase):
         :return: float, diffusion coefficient represented by D parameter;
         estimated based on curve fitting of empirical and normal theoretical diffusion.
         """
-        popt, _ = curve_fit(lambda x, d: generate_theoretical_msd_normal(x, d, self.dt), self.n_list,
+        popt, _ = curve_fit(lambda x, d: generate_theoretical_msd_normal(x, d, self.dt, self.dim), self.n_list,
                             self.empirical_msd)
         D = popt[0]
         return D
@@ -160,7 +160,7 @@ class Characteristic(CharacteristicBase):
         Modification of this function can also estimate D parameter
         """
         popt, _ = curve_fit(
-            lambda x, log_D, a: generate_theoretical_msd_anomalous_log(np.log(self.dt * self.n_list), log_D, a),
+            lambda x, log_D, a: generate_theoretical_msd_anomalous_log(np.log(self.dt * self.n_list), log_D, a, self.dim),
             np.log(self.dt * self.n_list), np.log(self.empirical_msd), bounds=((-np.inf, 0), (np.inf, 2)))
         alpha = popt[1]
         return alpha
@@ -265,7 +265,7 @@ class CharacteristicFour(Characteristic):
                        self.mean_squared_displacement_ratio, self.straightness,
                        self.p_variation, self.max_excursion_normalised] + list(self.velocity_autocorrelation) \
                        + list(self.p_variations)
-        self.columns = ["file", "diff_type", "motion", "D", "alpha",
+        self.columns = ["file", "Alpha", "motion", "D", "alpha",
                         "alpha_n_1", "alpha_n_2", "alpha_n_3", 
                         "fractal_dimension", "mean_gaussianity",
                         "mean_squared_displacement_ratio", "straightness",
@@ -398,7 +398,7 @@ class CharacteristicFour(Characteristic):
         eps = 0.001
         
         popt, cov = curve_fit(
-                lambda x, D, a, s2: generate_theoretical_msd_anomalous_with_noise(x, D, self.dt, a, s2),
+                lambda x, D, a, s2: generate_theoretical_msd_anomalous_with_noise(x, D, self.dt, a, s2, self.dim),
                 self.n_list, self.empirical_msd, p0 =(D_0,alpha_0,s2_0) , bounds=([0,0,0],[np.inf,2,s2_max]), 
                 method = 'trf', ftol = eps)   
                 
@@ -431,4 +431,3 @@ class CharacteristicFour(Characteristic):
         alpha_est = popt[1]
         
         return alpha_est, D_est
-    

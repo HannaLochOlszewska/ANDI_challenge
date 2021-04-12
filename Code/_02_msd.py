@@ -4,29 +4,31 @@ import numpy as np
 The helper functions used in characteristics calculation.
 """
 
-def generate_theoretical_msd_normal(n_list, D, dt):
+def generate_theoretical_msd_normal(n_list, D, dt, dim):
     """
     Function for generating msd of normal diffusion
     :param n_list: number of points in msd
     :param D: float, diffusion coefficient
     :param dt: float, time between steps
+    :param dim: int, dimension (1,2,3)
     :return: array of theoretical msd
     """
-    r = 4 * D * dt * n_list
+    r = 2 * dim * D * dt * n_list
     return r
 
-def generate_theoretical_msd_anomalous_log(log_dt_n_list, log_D, alpha):
+def generate_theoretical_msd_anomalous_log(log_dt_n_list, log_D, alpha, dim):
     """
     Function for generating logarithm msd of anomalous diffusion
     :param log_dt_n_list: logarithm of points in msd times dt
     :param log_D: float, logarithm of diffusion coefficient   
     :param alpha: float, anomalous exponent (alpha<1)
+    :param dim: int, dimension (1,2,3)
     :return: array of logarithm theoretical msd
     """
-    r = np.log(4) + log_D + alpha * log_dt_n_list
+    r = np.log(2 * dim) + log_D + alpha * log_dt_n_list
     return r
 
-def generate_theoretical_msd_anomalous_with_noise(n_list, D, dt, alpha, sigma_2):
+def generate_theoretical_msd_anomalous_with_noise(n_list, D, dt, alpha, sigma_2, dim):
     """
     Function for generating msd of anomalous diffusion
     :param n_list: number of points in msd
@@ -34,9 +36,10 @@ def generate_theoretical_msd_anomalous_with_noise(n_list, D, dt, alpha, sigma_2)
     :param dt: float, time between steps
     :param alpha: float, anomalous exponent (alpha<1)
     :param sigma_2: float, noise
+    :param dim: int, dimension (1,2,3)
     :return: array of theoretical msd
     """
-    r = 4 * D * (dt * n_list) ** alpha + sigma_2
+    r = 2 * dim * D * (dt * n_list) ** alpha + sigma_2
     return r
 
 def generate_empirical_msd(x, y, n_list, k=2):
