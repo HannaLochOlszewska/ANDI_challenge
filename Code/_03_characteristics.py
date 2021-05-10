@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from sklearn.linear_model import LinearRegression
+from scipy.stats import kstest, chi2
 
 from _02_msd import generate_theoretical_msd_normal, generate_empirical_msd, \
                     generate_theoretical_msd_anomalous_log, generate_empirical_pvariation, \
@@ -431,3 +432,61 @@ class CharacteristicFour(Characteristic):
         alpha_est = popt[1]
         
         return alpha_est, D_est
+    
+    
+class CharacteristicFive(CharacteristicFour):
+    """
+    Experimental class for 
+    """
+
+    def __init__(self, x, y, z, dim, file, percentage_max_n=0.1, typ="", motion=""):
+        """
+        :param x: list, x coordinates
+        :param y: list, y coordinates
+        :param y: list, z coordinates
+        :param dim: int, dimension
+        :param file: str, path to trajectory
+        :param percentage_max_n: float, percentage of length of the trajectory for msd generating
+        :param typ: str, type of diffusion i.e sub, super, rand
+        :param motion: str, mode of diffusion eg. normal, directed
+        """
+
+        CharacteristicFour.__init__(self, x, y, z, dim, file, percentage_max_n, typ, motion)
+        
+        self.velocity_autocorrelation, self.velocity_autocorrelation_names = self.get_velocity_autocorrelation([1,2])
+        self.ksstat = self.get_ksstat()
+
+        self.values = [self.file, self.type, self.motion, self.D, self.alpha,
+                       self.alpha_n_1, self.alpha_n_2, self.alpha_n_3, 
+                       self.fractal_dimension, self.mean_gaussianity,
+                       self.mean_squared_displacement_ratio, self.straightness,
+                       self.p_variation, self.max_excursion_normalised, self.ksstat] + list(self.velocity_autocorrelation) \
+                       + list(self.p_variations)
+        self.columns = ["file", "Alpha", "motion", "D", "alpha",
+                        "alpha_n_1", "alpha_n_2", "alpha_n_3", 
+                        "fractal_dimension", "mean_gaussianity",
+                        "mean_squared_displacement_ratio", "straightness",
+                        "p-variation", "max_excursion_normalised", "ksstat_chi2"] + self.velocity_autocorrelation_names \
+                        + self.p_variation_names
+                        
+        self.data = pd.DataFrame([self.values], columns=self.columns)
+        
+    def get_ksstat(self):
+        
+        dx = np.diff(self.x)
+        dxn = (dx - np.nanmean(dx))/np.nanstd(dx)
+        distpl = dxn**2
+        if self.dim > 1:
+            dy = np.diff(self.y)
+            dyn = (dy - np.nanmean(dy))/np.nanstd(dy)
+            distpl = distpl + dyn**2
+        if self.dim >2 :
+            dz = np.diff(self.z)
+            dzn = (dz - np.nanmean(dz))/np.nanstd(dz)
+            distpl = distpl + dzn**2
+            
+        ts = np.linspace(min(distpl),max(distpl),len(distpl))
+        
+        [stat,pv] = kstest(distpl, 'chi2', args=(ts,self.dim), alternative='two-sided', mode='exact')
+    
+        return stat

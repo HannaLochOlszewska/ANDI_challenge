@@ -74,6 +74,9 @@ def prepare_input(dev_training_folder, trajectories_file, dim):
                 tr = pd.DataFrame({'x': reshaped[0], 'y': reshaped[1]})
                 trs.append(tr)
                 
+    #trs=trs[12972:] # 377, 750, 12972?
+    #trs = trs[2543:2545]
+                
     characteristics_input = zip(trs, repeat(dim))
     pool = mp.Pool(processes=(mp.cpu_count() - 1))
     characteristics_data = pool.starmap(get_characteristics, characteristics_input)
@@ -83,7 +86,7 @@ def prepare_input(dev_training_folder, trajectories_file, dim):
 
     characteristics_data.to_csv(os.path.join(path_to_characteristics_data, "characteristics.csv"), index=False)
     
-    characteristics_data = characteristics_data.drop(["file", "diff_type", "motion"], axis=1)
+    characteristics_data = characteristics_data.drop(["file", "Alpha", "motion"], axis=1)
     
     X = characteristics_data.values
     np.save(os.path.join(path_to_characteristics_data, "X_data.npy"), X)
@@ -125,7 +128,7 @@ def generate_results(simulation_folder, model_folder, dim, result_file):
 
 if __name__ == "__main__":
     
-    prepare_input(dev_training_folder='challenge_for_scoring', trajectories_file='task1.txt', dim=1)
+    prepare_input(dev_training_folder='challenge_for_scoring', trajectories_file='task2.txt', dim=1)
     
-    generate_results(simulation_folder="challenge_for_scoring_1D", model_folder='Base_subtask_1D',
-                     dim=1, result_file="Results/task1_1.txt")
+    generate_results(simulation_folder="challenge_for_scoring_1D", model_folder='T2_subtask_1D',
+                     dim=1, result_file="Results/task2.txt")

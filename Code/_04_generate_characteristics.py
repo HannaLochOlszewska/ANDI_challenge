@@ -3,7 +3,7 @@ import os
 from itertools import repeat
 import pandas as pd
 
-from _03_characteristics import CharacteristicFour
+from _03_characteristics import CharacteristicFour, CharacteristicFive
 
 """
 Characteristics generators.
@@ -36,7 +36,7 @@ def get_characteristics(path_to_file, fname, dim, typ="", motion=""):
     alpha = trajectory['Alpha'].values[0]
     model = trajectory['Model'].values[0]
                 
-    ch = CharacteristicFour(x=x, y=y, z=z, dim=dim, file=fname, percentage_max_n=0.1, 
+    ch = CharacteristicFive(x=x, y=y, z=z, dim=dim, file=fname, percentage_max_n=0.1, 
                             typ=alpha, motion=model)
     data = ch.data
     
@@ -71,7 +71,7 @@ def generate_characteristics(simulation_folder, dimension):
     path_to_save = os.path.join(project_directory, "Data", simulation_folder)
 
     path_to_trajectories = os.path.join(path_to_save, "Trajectories")
-    path_to_characteristics_data = os.path.join(path_to_save, "Characteristics")
+    path_to_characteristics_data = os.path.join(path_to_save, "Characteristics_Five_1")
     if not os.path.exists(path_to_characteristics_data):
         os.makedirs(path_to_characteristics_data)
     trajectories_lists = [file for file in os.listdir(path_to_trajectories)]
@@ -86,5 +86,5 @@ def generate_characteristics(simulation_folder, dimension):
 
 if __name__ == "__main__":
 
-    generate_characteristics(simulation_folder="T2_subtask_1D", dimension=1)
-#    generate_characteristics(simulation_folder="T2_subtask_2D", dimension=2)
+#    generate_characteristics(simulation_folder="T2_subtask_1D", dimension=1)
+    generate_characteristics(simulation_folder="T2_subtask_2D", dimension=2)
