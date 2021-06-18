@@ -2,12 +2,15 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from sklearn.linear_model import LinearRegression
-from scipy.stats import kstest, chi2
+from scipy import linalg as LA
+from scipy.stats import kstest, chi2, normaltest
+from exponents import FindExponents
 
 from _02_msd import generate_theoretical_msd_normal, generate_empirical_msd, \
                     generate_theoretical_msd_anomalous_log, generate_empirical_pvariation, \
                     generate_empirical_velocity_autocorrelation, \
-                    generate_theoretical_msd_anomalous_with_noise
+                    generate_theoretical_msd_anomalous_with_noise, \
+                    generate_detrended_moving_average
                     
 """
 Classes of characteristics sets.
@@ -160,10 +163,13 @@ class Characteristic(CharacteristicBase):
         estimated based on curve fitting of empirical and normal anomalous diffusion.
         Modification of this function can also estimate D parameter
         """
-        popt, _ = curve_fit(
-            lambda x, log_D, a: generate_theoretical_msd_anomalous_log(np.log(self.dt * self.n_list), log_D, a, self.dim),
-            np.log(self.dt * self.n_list), np.log(self.empirical_msd), bounds=((-np.inf, 0), (np.inf, 2)))
-        alpha = popt[1]
+        try:
+            popt, _ = curve_fit(
+                lambda x, log_D, a: generate_theoretical_msd_anomalous_log(np.log(self.dt * self.n_list), log_D, a, self.dim),
+                np.log(self.dt * self.n_list), np.log(self.empirical_msd), bounds=((-np.inf, 0), (np.inf, 2)))
+            alpha = popt[1]
+        except ValueError:
+            alpha = 0
         return alpha
 
     def get_fractal_dimension(self):
@@ -306,8 +312,11 @@ class CharacteristicFour(Characteristic):
             p_var = generate_empirical_pvariation(self.x, self.y, p_list, m_list)
         for i in range(len(p_list)):
             pv = p_var[i]
-            gamma_power_fit = LinearRegression().fit(np.log(m_list).reshape(-1, 1), np.log(pv))
-            gamma = gamma_power_fit.coef_[0]
+            try:                                    
+                gamma_power_fit = LinearRegression().fit(np.log(m_list).reshape(-1, 1), np.log(pv))
+                gamma = gamma_power_fit.coef_[0]
+            except ValueError:
+                gamma = -9999                                                       
             test_values.append(gamma)
 
         feature_names = ['p_var_' + str(p) for p in p_list]
@@ -367,7 +376,10 @@ class CharacteristicFour(Characteristic):
         The maximal excursion of the particle, normalised to its total displacement (range of movement)
         :return: float, max excursion
         """
-        excursion = self.d / self.get_total_displacement()
+        try:
+            excursion = self.d / self.get_total_displacement()
+        except ValueError:
+            excursion = 0
         return excursion
         
         
@@ -378,10 +390,13 @@ class CharacteristicFour(Characteristic):
         "Optimal parameters for anomalous-diffusion-exponent estimation from noisy data"
         Phys. Rev. E 98, 062139 (2018).
         """
-        log_msd = np.log(self.empirical_msd)
-        log_n = np.array([np.log(i) for i in range(1,self.max_number_of_points_in_msd)])
-        alpha = ((self.max_number_of_points_in_msd+1) * np.sum(log_n * log_msd) - np.sum(log_n * np.sum(log_msd))) / \
-                ((self.max_number_of_points_in_msd+1) * np.sum(log_n ** 2) - (np.sum(log_n)) ** 2)
+        try:
+            log_msd = np.log(self.empirical_msd)
+            log_n = np.array([np.log(i) for i in range(1,self.max_number_of_points_in_msd)])
+            alpha = ((self.max_number_of_points_in_msd+1) * np.sum(log_n * log_msd) - np.sum(log_n * np.sum(log_msd))) / \
+                    ((self.max_number_of_points_in_msd+1) * np.sum(log_n ** 2) - (np.sum(log_n)) ** 2)
+        except ValueError:
+            alpha = 0
         return alpha
 
     
@@ -398,13 +413,16 @@ class CharacteristicFour(Characteristic):
         s2_0 = self.empirical_msd[0]/2
         eps = 0.001
         
-        popt, cov = curve_fit(
-                lambda x, D, a, s2: generate_theoretical_msd_anomalous_with_noise(x, D, self.dt, a, s2, self.dim),
-                self.n_list, self.empirical_msd, p0 =(D_0,alpha_0,s2_0) , bounds=([0,0,0],[np.inf,2,s2_max]), 
-                method = 'trf', ftol = eps)   
-                
-        D_est = popt[0]
-        alpha_est = popt[1]
+        try:
+            popt, cov = curve_fit(
+                    lambda x, D, a, s2: generate_theoretical_msd_anomalous_with_noise(x, D, self.dt, a, s2, self.dim),
+                    self.n_list, self.empirical_msd, p0 =(D_0,alpha_0,s2_0) , bounds=([0,0,0],[np.inf,2,s2_max]), 
+                    method = 'trf', ftol = eps)                   
+            D_est = popt[0]
+            alpha_est = popt[1]
+        except ValueError:
+            D_est = 0
+            alpha_est = 0
         
         return alpha_est, D_est
     
@@ -454,20 +472,45 @@ class CharacteristicFive(CharacteristicFour):
         CharacteristicFour.__init__(self, x, y, z, dim, file, percentage_max_n, typ, motion)
         
         self.velocity_autocorrelation, self.velocity_autocorrelation_names = self.get_velocity_autocorrelation([1,2])
-        self.ksstat = self.get_ksstat()
-
+        self.ksstat = self.get_ksstat()        
+        self.dagostino_stats, self.dagostino_stats_names = self.get_dagostino_stats()
+        self.mv_features, self.mv_features_names = self.moving_window(windows=[10,20])
+        self.eM, self.eL, self.eJ = self.get_exponents()
+        self.maximum_ts = self.get_maximum_test_statistic()
+        self.radius_gyration_tensor = self.get_tensor()
+        self.trappedness = self.get_trappedness()
+        self.eigenvalues, self.eigenvectors = LA.eig(self.radius_gyration_tensor)
+        self.asymmetry = self.get_asymmetry()
+        self.diff_kurtosis = self.get_kurtosis_corrected()
+        self.efficiency = self.get_efficiency()
+        
+        self.max_std_x, self.max_std_y = self.max_min_std()
+        self.max_std_change_x, self.max_std_change_y = self.max_std_change()
+        self.velocity_autocorrelation, self.velocity_autocorrelation_names = self.get_velocity_autocorrelation([1,2])
+        self.dma, self.dma_names = self.get_dma([1,2])
+        
         self.values = [self.file, self.type, self.motion, self.D, self.alpha,
                        self.alpha_n_1, self.alpha_n_2, self.alpha_n_3, 
                        self.fractal_dimension, self.mean_gaussianity,
                        self.mean_squared_displacement_ratio, self.straightness,
-                       self.p_variation, self.max_excursion_normalised, self.ksstat] + list(self.velocity_autocorrelation) \
-                       + list(self.p_variations)
+                       self.p_variation, self.max_excursion_normalised, self.ksstat,
+                       self.eM, self.eL, self.eJ, self.maximum_ts, self.trappedness, 
+                       self.asymmetry, self.diff_kurtosis, self.efficiency,
+                       self.max_std_x, self.max_std_y, self.max_std_change_x, self.max_std_change_y] \
+                       + list(self.velocity_autocorrelation) \
+                       + list(self.p_variations) + self.dagostino_stats + self.mv_features + list(self.dma)
+                       
+
         self.columns = ["file", "Alpha", "motion", "D", "alpha",
                         "alpha_n_1", "alpha_n_2", "alpha_n_3", 
                         "fractal_dimension", "mean_gaussianity",
                         "mean_squared_displacement_ratio", "straightness",
-                        "p-variation", "max_excursion_normalised", "ksstat_chi2"] + self.velocity_autocorrelation_names \
-                        + self.p_variation_names
+                        "p-variation", "max_excursion_normalised", "ksstat_chi2",
+                        "M", "L", "J", "max_ts", "trappedness", 'asymmetry', 
+                        "diff_kurtosis", "efficiency", 'max_std_x', 'max_std_y', 
+                        'max_std_change_x', 'max_std_change_y'] + self.velocity_autocorrelation_names \
+                        + self.p_variation_names + self.dagostino_stats_names + self.mv_features_names \
+                        + list(self.dma_names)
                         
         self.data = pd.DataFrame([self.values], columns=self.columns)
         
@@ -490,3 +533,186 @@ class CharacteristicFive(CharacteristicFour):
         [stat,pv] = kstest(distpl, 'chi2', args=(ts,self.dim), alternative='two-sided', mode='exact')
     
         return stat
+
+    def get_dagostino_stats(self):
+        
+        stats, names = [], []
+        
+        stat, p = normaltest(np.diff(self.x))
+        stats.append(stat)
+        names.append('dagostino_x')
+        if self.dim > 1:
+            stat, p = normaltest(np.diff(self.y))
+            stats.append(stat)
+            names.append('dagostino_y')
+        if self.dim >2 :
+            stat, p = normaltest(np.diff(self.z))
+            stats.append(stat)
+            names.append('dagostino_z')
+        
+        return stats, names
+    
+    def moving_window(self, windows):
+        
+        values = []
+        full_names =[]
+        for window in windows:
+            names = ['mw_x_mean','mw_y_mean','mw_x_std','mw_y_std']
+            names = [st + str(window) for st in names]
+            
+            while self.N < window+2:
+                window = int(self.N/2)
+            
+            mvw_x_mean = pd.Series(self.x).rolling(window=window).mean()
+            xmd = np.nanmean(np.abs(np.diff(np.sign(np.diff(mvw_x_mean)))))/2
+            mvw_x_std = pd.Series(self.x).rolling(window=window).std()
+            xsd = np.nanmean(np.abs(np.diff(np.sign(np.diff(mvw_x_std)))))/2
+            
+            mvw_y_mean = pd.Series(self.y).rolling(window=window).mean()
+            ymd = np.nanmean(np.abs(np.diff(np.sign(np.diff(mvw_y_mean)))))/2
+            mvw_y_std = pd.Series(self.y).rolling(window=window).std()
+            ysd = np.nanmean(np.abs(np.diff(np.sign(np.diff(mvw_y_std)))))/2
+            
+            values = values + [xmd, ymd, xsd, ysd]
+            full_names = full_names + names
+        
+        return values, full_names
+    
+    def get_exponents(self):
+        
+        if self.dim==1:
+            onelong = self.x
+        elif self.dim==2:
+            onelong = np.concatenate([self.x, self.y])
+        if self.dim==3:
+            onelong = np.concatenate([self.x, self.y, self.z])
+        
+        return FindExponents(onelong, self.dim)
+    
+    def get_trappedness(self, n=2):
+        """
+        Trappedness is the probability that a diffusing particle with the diffusion coefficient D
+        and traced for a time interval t is trapped in a bounded region with radius r0.
+        :param n: int, given point of trappedness
+        :return: float, probability of trappedness in point n
+        """
+        t = self.n_list * self.dt
+        popt, _ = curve_fit(lambda x, d: generate_theoretical_msd_normal(self.n_list[:2], d, self.dt, self.dim),
+                            self.n_list[:2], self.empirical_msd[:2])
+        d = popt[0]
+        p = 1 - np.exp(0.2048 - 0.25117 * ((d * t) / (self.d / 2) ** 2))
+        p = np.array([i if i > 0 else 0 for i in p])[n]
+        
+        return p
+    
+    def get_maximum_test_statistic(self):
+        """
+        :return: float, the value of the maximum test statistics
+        """
+        distance = np.array(
+            [self.get_displacement(self.x[i], self.y[i], self.x[0], self.y[0]) for i in range(1, self.N)])
+        d_max = np.max(distance)
+        # TODO: The sigma estimator can be improved (Briane et al., 2018)
+        sigma_2 = 1 / (2 * (self.N - 1) * self.dt) * np.sum(self.displacements ** 2)
+        ts = d_max / np.sqrt(sigma_2 * self.T)
+
+        return ts
+    
+    def get_tensor(self):
+        """
+        :return: matrix, the tensor T for given trajectory
+        """
+        a = sum((self.x - np.mean(self.x)) ** 2) / len(self.x)
+        c = sum((self.y - np.mean(self.y)) ** 2) / len(self.y)
+        b = sum((self.x - np.mean(self.x)) * (self.y - np.mean(self.y))) / len(self.x)
+        return np.array([[a, b], [b, c]])
+        
+    def get_asymmetry(self):
+        """
+        The asymmetry of a trajectory can be used to detect directed motion.
+        :return: float, asymmetry parameter - only real part of
+        """
+        lambda1 = self.eigenvalues[0]
+        lambda2 = self.eigenvalues[1]
+        a = -1 * np.log(1 - (lambda1 - lambda2) ** 2 / (2 * (lambda1 + lambda2) ** 2))
+        return a.real
+    
+    def get_kurtosis_corrected(self):
+        """
+        Kurtosis measures the asymmetry and peakedness of the distribution of points within a trajectory
+        :return: float, kurtosis for trajectory
+        """
+        index = np.where(self.eigenvalues == max(self.eigenvalues))[0][0]
+        dominant_eigenvector = self.eigenvectors[index]
+        a_prod_b = np.array([sum(np.array([self.x[i], self.y[i]]) * dominant_eigenvector) for i in range(len(self.x))])
+        K = 1 / self.N * sum((a_prod_b - np.mean(a_prod_b)) ** 4 / np.std(a_prod_b) ** 4) - 3
+        return K
+    
+    def get_efficiency(self):
+        """
+        Efficiency relates the net squared displacement of a particle to the sum of squared step lengths
+        :return: float, efficiency parameter
+        """
+        upper = self.get_displacement(self.x[self.N - 2], self.y[self.N - 2], self.x[0], self.y[0]) ** 2
+        displacements_to_squere = self.displacements ** 2
+        lower = (self.N - 1) * sum(displacements_to_squere)
+        E = upper / lower
+        return E
+    
+#class CharacteristicExtension(CharacteristicBase):
+#    
+#    def __init__(self, x, y, z, dim, file, percentage_max_n=0.1, typ="", motion=""):
+#        """
+#        :param x: list, x coordinates
+#        :param y: list, y coordinates
+#        :param y: list, z coordinates
+#        :param dim: int, dimension
+#        :param file: str, path to trajectory
+#        :param percentage_max_n: float, percentage of length of the trajectory for msd generating
+#        :param typ: str, type of diffusion i.e sub, super, rand
+#        :param motion: str, mode of diffusion eg. normal, directed
+#        """
+#
+#        CharacteristicBase.__init__(self, x, y, z, dim, file, percentage_max_n, typ, motion)
+#        
+
+        
+    def max_min_std(self, window=3):
+        stds_x = pd.Series(self.x).rolling(window=window).std()
+        stds_y = pd.Series(self.y).rolling(window=window).std()
+    
+        ratio_x = np.nanmax(stds_x)/np.nanmean(stds_x)
+        ratio_y = np.nanmax(stds_y)/np.nanmean(stds_y)
+    
+        return ratio_x, ratio_y
+    
+    def max_std_change(self, window=3):
+        stds_x = pd.Series(self.x).rolling(window=window).std()
+        stds_y = pd.Series(self.y).rolling(window=window).std()
+    
+        change_x = np.nanmax(np.abs(np.diff(stds_x)))/np.std(self.x)
+        change_y = np.nanmax(np.abs(np.diff(stds_y)))/np.std(self.y)
+    
+        return change_x, change_y
+            
+    def get_velocity_autocorrelation(self, hc_lag_list):
+        """
+        Calculate the velocity autocorrelation
+        :return: float, the empirical autocorrelation for lag 1.
+        """
+        # hc_lag_list = [1,2,3,4,5]
+        titles = ["vac_lag_" + str(x) for x in hc_lag_list]
+        if self.dim == 1:
+            autocorr = generate_empirical_velocity_autocorrelation(self.x, np.zeros(len(self.x)), hc_lag_list, self.dt, delta=1)
+        elif self.dim == 2:
+            autocorr = generate_empirical_velocity_autocorrelation(self.x, self.y, hc_lag_list, self.dt, delta=1)
+        return autocorr, titles
+    
+    def get_dma(self, lag_list):
+        
+        titles = ["dma_lag_" + str(x) for x in lag_list]
+        if self.dim == 1:
+            dma = generate_detrended_moving_average(self.x, np.zeros(len(self.x)), lag_list)
+        elif self.dim == 2:
+            dma = generate_detrended_moving_average(self.x, self.y, lag_list)
+        return dma, titles
