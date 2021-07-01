@@ -112,6 +112,7 @@ def generate_empirical_velocity_autocorrelation(x, y, n_list, dt, delta=1):
     r = []
     for n in n_list:
         r.append(empirical_velocity_autocorrelation(x, y, n, dt, delta))
+    r = r/empirical_velocity_autocorrelation(x, y, 0, dt, delta)
     return np.array(r)
 
 
@@ -126,16 +127,36 @@ def empirical_velocity_autocorrelation(x, y, n, dt, delta):
     :return: point of empirical msd for given point
     """
 
-    velocities_x = np.diff(x, delta)/(delta*dt)
-    velocities_y = np.diff(y, delta)/(delta*dt)
+    velocities_x = (x[delta:]-x[:-delta])/(delta*dt)
+    velocities_y = (y[delta:]-y[:-delta])/(delta*dt)
     N = len(velocities_x)
 
     vx1 = np.array(velocities_x[:N - n])
     vx2 = np.array(velocities_x[n:])
     vy1 = np.array(velocities_y[:N - n])
     vy2 = np.array(velocities_y[n:])
+    
+    mux = np.mean(velocities_x)
+    muy = np.mean(velocities_y)
 
-    c = vx2 * vx1 + vy2 * vy1
+    c = (vx2 - mux) * (vx1 - mux) + (vy2 - muy) * (vy1 - muy)
     r = np.mean(c)
-
     return r
+    
+def generate_detrended_moving_average(x, y, n_list):
+    
+    r = []
+    for n in n_list:
+        r.append(detrended_moving_average(x, y, n))
+    return np.array(r)
+
+def detrended_moving_average(x, y, n):
+    
+    mam_x = [np.nanmean(x[:i+1]) for i in range(n, len(x))]
+    mam_y = [np.nanmean(y[:i+1]) for i in range(n, len(y))]
+    
+    dma = np.nanmean((x[n:]-mam_x)**2 + (y[n:]-mam_y)**2)
+    
+    return dma
+    
+

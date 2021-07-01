@@ -529,8 +529,9 @@ class CharacteristicFive(CharacteristicFour):
             distpl = distpl + dzn**2
             
         ts = np.linspace(min(distpl),max(distpl),len(distpl))
-        
-        [stat,pv] = kstest(distpl, 'chi2', args=(ts,self.dim), alternative='two-sided', mode='exact')
+        ts_nonzero = np.where(ts==0, np.finfo(float).eps, ts)
+                    
+        [stat,pv] = kstest(distpl, 'chi2', args=(ts_nonzero,self.dim), alternative='two-sided', mode='exact')
     
         return stat
 
